@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef3f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c181b" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Flash-flood forecaster prototype for a smart lake monitoring system: predicts water level 3 hours ahead on the edge gateway.">
+<title>Lake Flood Forecaster</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+/* Layout: control-room strip of gauges over one wide hydrograph, panels and the alert log beneath */
+:root {
+  --bg: #eef3f3; --surface: #ffffff; --fg: #13262b; --muted: #576c71; --line: #d3dedf;
+  --accent: #0e6f82; --rain: #5f86b0; --ok: #2b7a4b; --warn: #a96b10; --crit: #bf3426;
+  --ok-bg: #e2f1e7; --warn-bg: #fbefd9; --crit-bg: #fbe3df;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0c181b; --surface: #132327; --fg: #e1edef; --muted: #8fa6ab; --line: #24393e;
+  --accent: #4cbfd4; --rain: #7ea7d2; --ok: #5cc489; --warn: #e3a94b; --crit: #f06c5c;
+  --ok-bg: #16342a; --warn-bg: #3a2c14; --crit-bg: #3d1b17; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0c181b; --surface: #132327; --fg: #e1edef; --muted: #8fa6ab; --line: #24393e;
+  --accent: #4cbfd4; --rain: #7ea7d2; --ok: #5cc489; --warn: #e3a94b; --crit: #f06c5c;
+  --ok-bg: #16342a; --warn-bg: #3a2c14; --crit-bg: #3d1b17; color-scheme: dark }
+
+* { box-sizing: border-box }
+html { scrollbar-color: var(--line) var(--bg); accent-color: var(--accent); caret-color: var(--accent) }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--f-body); margin: 0 }
+::selection { background: var(--accent); color: var(--bg) }
+a { color: var(--accent); text-underline-offset: 3px }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 18px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; letter-spacing: .01em }
+h1 { font-size: 1.9rem; font-weight: 700; line-height: 1.1 }
+h2 { font-size: 1.15rem; font-weight: 600 }
+.eyebrow { font: 600 .74rem/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+.mono { font-family: var(--f-data); font-variant-numeric: tabular-nums }
+p { margin: 0 }
+.muted { color: var(--muted) }
+
+header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px }
+header .intro { display: grid; gap: 10px; min-width: 0 }
+header .sub { color: var(--muted); max-width: 62ch }
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; color: var(--muted); font-size: .88rem; padding-top: 6px }
+.clock { text-align: right }
+.clock .t { font: 500 1.5rem/1.1 var(--f-data); font-variant-numeric: tabular-nums }
+
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
+.controls .grp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.controls .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px }
+button, select { font: 600 .9rem var(--f-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent }
+button:hover:not(:disabled) { border-color: var(--accent) }
+button:active:not(:disabled) { transform: translateY(1px) }
+button:disabled { cursor: default; color: var(--muted); border-style: dashed }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg) }
+button.on { background: var(--crit-bg); border-color: var(--crit); color: var(--crit) }
+label.inline { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted) }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; border-top: 3px solid var(--line) }
+.kpi .v { font: 600 1.9rem/1 var(--f-display); font-variant-numeric: tabular-nums }
+.kpi .v small { font-size: .95rem; color: var(--muted); font-weight: 500 }
+.kpi .d { font-size: .88rem; color: var(--muted) }
+.kpi[data-s="WARNING"] { border-top-color: var(--warn) } .kpi[data-s="CRITICAL"] { border-top-color: var(--crit) } .kpi[data-s="NORMAL"] { border-top-color: var(--ok) }
+.pill { display: inline-block; font: 600 .72rem/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; vertical-align: middle }
+.pill.NORMAL, .pill.SUCCESS, .pill.RESOLVED { background: var(--ok-bg); color: var(--ok) }
+.pill.WARNING, .pill.OPEN-W { background: var(--warn-bg); color: var(--warn) }
+.pill.CRITICAL { background: var(--crit-bg); color: var(--crit) }
+.pill.FORECAST { background: transparent; color: var(--accent); border: 1px solid var(--accent) }
+.pill.EDGE { background: transparent; color: var(--muted); border: 1px solid var(--line) }
+
+.main { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; align-items: stretch }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; align-content: start }
+.chart-panel { display: flex; flex-direction: column }
+.panel-h { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; align-items: baseline }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .82rem; color: var(--muted) }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px }
+.chart-box { position: relative; width: 100%; flex: 1; min-height: 380px }
+canvas { display: block; width: 100%; height: 100% }
+.side { display: grid; gap: 18px; min-width: 0 }
+
+.lead { display: grid; gap: 10px }
+.lead .big { font: 700 2.6rem/1 var(--f-display); color: var(--accent); font-variant-numeric: tabular-nums }
+.compare { display: grid; gap: 6px; font-size: .9rem }
+.compare div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line) }
+
+.reading { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .9rem; margin: 0 }
+.reading dt { color: var(--muted) } .reading dd { margin: 0; text-align: right }
+.reading .k { font-family: var(--f-data); font-size: .78rem; color: var(--muted) }
+
+.lower { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; align-items: start }
+.tbl { overflow-x: auto }
+table { width: 100%; border-collapse: collapse; font-size: .88rem }
+th { font: 600 .74rem var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap }
+tr.new td { animation: flash 1.2s ease-out }
+@keyframes flash { from { background: var(--warn-bg) } to { background: transparent } }
+.empty { color: var(--muted); padding: 14px 8px }
+
+.coef { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .88rem }
+.coef span:nth-child(even) { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right }
+
+.fit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px }
+.fit ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .92rem }
+.fit code, .panel code { font-family: var(--f-data); font-size: .82rem; background: var(--bg); padding: 1px 4px; border-radius: 3px }
+
+@media (max-width: 900px) { .main, .lower, .fit { grid-template-columns: minmax(0, 1fr) } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 520px) { .chart-box { min-height: 300px } .clock { text-align: left } .controls .sep { display: none } }
+@media (prefers-reduced-motion: reduce) { tr.new td { animation: none } }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <header>
+    <div class="intro">
+      <h1>Flash-flood forecaster on the edge gateway</h1>
+      <p class="sub">The gateway predicts the water level 3 hours ahead from rainfall and level history, so the park team and DOE are warned before the lake overflows, even while a thunderstorm has cut the 4G link.</p>
+    </div>
+    <div class="clock">
+      <p class="eyebrow">Node LAKE-N03 · Spillway · simulated time (MYT)</p>
+      <p class="t" id="clock">--</p>
+    </div>
+  </header>
+
+  <div class="controls" role="group" aria-label="Simulation controls">
+    <div class="grp">
+      <button id="play" class="primary" type="button">Pause</button>
+      <label class="inline" for="speed">Speed
+        <select id="speed">
+          <option value="600">1 h in 7 s</option>
+          <option value="300" selected>1 h in 4 s</option>
+          <option value="120">1 h in 1.5 s</option>
+        </select>
+      </label>
+    </div>
+    <span class="sep"></span>
+    <div class="grp">
+      <span class="eyebrow">Start weather</span>
+      <button type="button" id="btn-thunder">Afternoon thunderstorm (~38 mm)</button>
+      <button type="button" id="btn-monsoon">Monsoon downpour (~95 mm)</button>
+      <span class="muted" style="font-size:.88rem" id="rain-status" role="status"></span>
+    </div>
+    <span class="sep"></span>
+    <div class="grp">
+      <button type="button" id="btn-outage">Cut 4G link</button>
+      <button type="button" id="btn-reset">Reset</button>
+    </div>
+  </div>
+
+  <section class="kpis" aria-label="Current status">
+    <div class="kpi" id="k-level"><span class="eyebrow">Water level now</span><span class="v mono" id="v-level">--</span><span class="d" id="d-level"></span></div>
+    <div class="kpi" id="k-peak"><span class="eyebrow">Forecast peak, next 3 h</span><span class="v mono" id="v-peak">--</span><span class="d" id="d-peak"></span></div>
+    <div class="kpi" id="k-ttc"><span class="eyebrow">Time to flood level</span><span class="v" id="v-ttc">--</span><span class="d" id="d-ttc"></span></div>
+    <div class="kpi" id="k-link"><span class="eyebrow">Uplink to AWS</span><span class="v" id="v-link">--</span><span class="d" id="d-link"></span></div>
+  </section>
+
+  <div class="main">
+    <section class="panel chart-panel" aria-labelledby="h-chart">
+      <div class="panel-h">
+        <h2 id="h-chart">Water level and rainfall: last 6 h and next 3 h</h2>
+        <div class="legend" aria-hidden="true">
+          <span><i style="border-color:var(--fg)"></i>Measured</span>
+          <span><i style="border-color:var(--accent);border-top-style:dashed"></i>Forecast ± error band</span>
+          <span><i style="border-color:var(--warn);border-top-style:dashed"></i>Warning 130 cm</span>
+          <span><i style="border-color:var(--crit)"></i>Flood 145 cm</span>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chart" role="img" aria-label="Hydrograph of measured and forecast water level with rainfall bars"></canvas></div>
+      <p class="muted" style="font-size:.85rem">The “4G” strip at the top shows when the link was down. Readings taken then sit in the gateway's SQLite buffer and are sent oldest first when the link returns.</p>
+    </section>
+
+    <div class="side">
+      <section class="panel lead" aria-labelledby="h-lead">
+        <h2 id="h-lead">Warning time gained</h2>
+        <p class="big" id="lead-big">--</p>
+        <p class="muted" id="lead-txt"></p>
+        <div class="compare" id="lead-cmp"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-read">
+        <div class="panel-h"><h2 id="h-read">Latest reading</h2><span class="k mono muted" style="font-size:.78rem" id="seq">--</span></div>
+        <dl class="reading" id="reading"></dl>
+      </section>
+    </div>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-labelledby="h-alerts">
+      <div class="panel-h"><h2 id="h-alerts">Alert log</h2><span class="muted" style="font-size:.85rem">Rows as stored in the <code>alert</code> table</span></div>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Reading time</th><th>Source</th><th>Severity</th><th>Value</th><th>What happened</th><th>Sent to SNS</th></tr></thead>
+          <tbody id="alerts"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-model">
+      <h2 id="h-model">The forecasting model</h2>
+      <p style="font-size:.92rem">A linear model predicts the level change every 5 minutes from recent rain and the current level. It starts from a fit to 30 days of archived readings and re-fits itself after every new reading (recursive least squares), so it adapts if the inlet silts up or the spillway is cleared.</p>
+      <div class="coef" id="coef"></div>
+      <p class="muted" style="font-size:.85rem" id="fit"></p>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-fit">
+    <h2 id="h-fit">How this fits Deliverables 1 and 2</h2>
+    <div class="fit">
+      <div>
+        <h3 class="eyebrow" style="margin-bottom:8px">Where it runs</h3>
+        <ul>
+          <li>A Python service on the Raspberry Pi gateway, beside the existing threshold check. It reads <code>local_reading</code> from SQLite, so it keeps forecasting with no internet.</li>
+          <li>If a flood is forecast while 4G is down, the gateway switches on the park's warning lights at once and queues the alert. Alerts are sent before buffered readings when the link returns.</li>
+          <li>Lambda re-runs the same model in the cloud on synced data, as it already does for threshold alerts.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="eyebrow" style="margin-bottom:8px">Schema changes</h3>
+        <ul>
+          <li><code>alert.source</code> gains a third value, <code>FORECAST</code>. For these rows <code>measured_value</code> holds the predicted peak.</li>
+          <li>New table <code>flood_forecast</code>: <code>forecast_id</code>, <code>node_id</code> (FK), <code>issued_ts</code>, <code>predicted_peak_cm</code>, <code>predicted_peak_ts</code>, <code>minutes_to_critical</code>, <code>model_version</code>, <code>error_cm</code>.</li>
+          <li>The 130 and 145 cm limits are <code>alert_threshold</code> rows for <code>WATER_LEVEL</code>, not values in code.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="eyebrow" style="margin-bottom:8px">Backlog items covered</h3>
+        <ul>
+          <li><strong>ID10</strong> AI predictions: trained on the readings archived in S3.</li>
+          <li><strong>ID04</strong> Water level trends: uses <code>water_level_cm</code> and <code>rainfall_mm</code>.</li>
+          <li><strong>ID02</strong> Automated alerts: warns before the threshold is crossed, not after.</li>
+          <li><strong>ID07</strong> Outages: forecasting and local warnings work offline.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted" style="font-size:.85rem">All data on this page is simulated by a water-balance model of a 4-acre lake (about 1.6 ha) fed by a 26 ha park catchment. On site, rain ahead is unknown, so the forecast assumes the current intensity tapers off with a 30-minute half-life. MetMalaysia radar nowcasts could replace that assumption later.</p>
+  </section>
+
+  <footer>
+    <span>Smart Lake Monitoring System · TFB3033 IT Project Management, September 2026 trimester</span>
+    <a href="https://github.com/shawarmawithgarlicsauce/itpm-project">Source on GitHub</a>
+  </footer>
+</main>
+
+<script>
+// ---- Lake + forecaster core (no DOM) ----
+const STEP_MIN = 5, HIST = 72, HORIZON = 36;           // 6 h shown, 3 h forecast
+const LVL = { base: 100, crest: 110, warn: 130, crit: 145 }; // cm, matches alert_threshold rows
+// 4-acre lake (~1.6 ha) draining a ~26 ha park catchment
+const PHYS = { catch: 16, runoff: 0.55, k: 0.07, ks: 0.006, kb: 0.0025, inflow: 0.02 };
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(r) { return Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r()); }
+
+// rain intensity profiles in mm/h, one value per 5-min step
+const SCENARIOS = {
+  thunder: [10, 30, 55, 70, 65, 50, 35, 20, 10, 5, 2].map(v => v * 1.3),   // ~35 mm in under an hour
+  monsoon: [8, 15, 25, 30, 35, 38, 40, 42, 40, 38, 36, 35, 34, 34, 32, 30, 30, 28, 26, 25, 24, 22, 20, 18, 15, 12, 10, 8, 6, 4, 2].map(v => v * 1.5),   // ~90 mm over 2.5 h
+};
+
+function makeLake(seed) {
+  return { r: rng(seed), h: 108, S: 0.4, queue: [] };
+}
+function lakeStep(L) {
+  const I = L.queue.length ? L.queue.shift() * (0.75 + 0.5 * L.r()) : 0;
+  const rain = I / 12;                                   // mm in this 5 min
+  L.S += rain / 10 * PHYS.catch * PHYS.runoff;
+  const q = L.S * PHYS.k; L.S -= q;
+  const spill = PHYS.ks * Math.pow(Math.max(0, L.h - LVL.crest), 1.5);
+  L.h += rain / 10 + q - spill - PHYS.kb * (L.h - LVL.base) + PHYS.inflow;
+  return { rain, I, h: L.h + gauss(L.r) * 0.25 };        // gauge noise ±0.25 cm
+}
+
+// ---- forecaster: ARX model, Δlevel = θ·x, fitted by least squares then updated online (RLS) ----
+const FEAT = ['Rain this 5 min', 'Rain in last hour', 'Rain 1–3 h ago', 'Spillway outflow', 'Outlet pipe outflow', 'Base inflow'];
+function features(rains, i, h) {   // rains[i] = rain at step i, h = level at step i
+  let r1 = 0, r3 = 0;
+  for (let j = 1; j <= 12; j++) r1 += rains[i - j] || 0;
+  for (let j = 13; j <= 36; j++) r3 += rains[i - j] || 0;
+  return [rains[i] || 0, r1, r3, Math.pow(Math.max(0, h - LVL.crest), 1.5), h - LVL.base, 1];
+}
+function solve(A, b) {  // Gauss-Jordan, returns A^-1 b and A^-1
+  const n = b.length, M = A.map((row, i) => [...row, ...row.map((_, j) => +(i === j)), b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c]; for (let k = 0; k <= 2 * n; k++) M[c][k] /= d;
+    for (let r = 0; r < n; r++) if (r !== c) { const f = M[r][c]; for (let k = 0; k <= 2 * n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return { x: M.map(r => r[2 * n]), inv: M.map(r => r.slice(n, 2 * n)) };
+}
+function trainModel(days, seed) {  // stands in for the archive in S3: 30 days of past readings with random storms
+  const L = makeLake(seed), r = rng(seed + 1), rains = [], hs = [];
+  for (let s = 0; s < days * 288; s++) {
+    if (s % 288 === 0 && r() < 0.65) { const at = Math.floor(r() * 200), kind = r() < 0.5 ? 'thunder' : 'monsoon', sc = 0.5 + r();
+      L.pending = { at: s + at, prof: SCENARIOS[kind].map(v => v * sc) }; }
+    if (L.pending && s === L.pending.at) L.queue.push(...L.pending.prof);
+    const o = lakeStep(L); rains.push(o.rain); hs.push(o.h);
+  }
+  const n = FEAT.length, A = Array.from({ length: n }, () => Array(n).fill(0)), b = Array(n).fill(0);
+  for (let i = 36; i < hs.length - 1; i++) {
+    const x = features(rains, i + 1, hs[i]), y = hs[i + 1] - hs[i];   // rain during the next step drives the next change
+    for (let a = 0; a < n; a++) { b[a] += x[a] * y; for (let c = 0; c < n; c++) A[a][c] += x[a] * x[c]; }
+  }
+  for (let a = 0; a < n; a++) A[a][a] += 1e-6;
+  const { x: theta, inv: P } = solve(A, b);
+  let se = 0, cnt = 0;
+  for (let i = 36; i < hs.length - 1; i++) { const x = features(rains, i + 1, hs[i]); const e = hs[i + 1] - hs[i] - dot(theta, x); se += e * e; cnt++; }
+  return { theta, P: P.map(row => row.map(v => v * 50)), mse: se / cnt, rows: cnt, lambda: 0.998 };
+}
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+function rlsUpdate(M, x, y) {
+  const Px = M.P.map(row => dot(row, x)), den = M.lambda + dot(x, Px), e = y - dot(M.theta, x);
+  const K = Px.map(v => v / den);
+  M.theta = M.theta.map((t, i) => t + K[i] * e);
+  M.P = M.P.map((row, i) => row.map((v, j) => (v - K[i] * Px[j]) / M.lambda));
+  M.mse = 0.97 * M.mse + 0.03 * e * e;
+}
+// rain ahead is unknown on site, so assume the current intensity tapers off with a 30-min half-life
+function forecast(M, rains, hs) {
+  const n = rains.length, I0 = ((rains[n - 1] || 0) + (rains[n - 2] || 0) + (rains[n - 3] || 0)) / 3;
+  const rr = rains.slice(), out = []; let h = hs[hs.length - 1], sd = Math.sqrt(M.mse);
+  for (let k = 1; k <= HORIZON; k++) {
+    rr.push(I0 * Math.pow(0.5, k * STEP_MIN / 30));
+    h += dot(M.theta, features(rr, rr.length - 1, h));
+    out.push({ h, band: 2 * sd * Math.sqrt(k) + 0.04 * Math.max(0, h - hs[hs.length - 1]) * Math.sqrt(k) });
+  }
+  return out;
+}
+if (typeof module !== 'undefined') module.exports = { SCENARIOS, LVL, makeLake, lakeStep, trainModel, forecast, rlsUpdate, features };
+
+
+// ---- simulation state ----
+const T0 = Date.UTC(2026, 11, 8, 4, 0);                  // 8 Dec 2026, 12:00 MYT, northeast monsoon season
+const $ = id => document.getElementById(id);
+let S, timer = null, playing = true;
+
+function fmtTime(step) { const d = new Date(T0 + step * STEP_MIN * 60000 + 8 * 3600000); return d.toISOString().slice(11, 16); }
+function isoUtc(step) { return new Date(T0 + step * STEP_MIN * 60000).toISOString().replace('.000', ''); }
+function status(h) { return h >= LVL.crit ? 'CRITICAL' : h >= LVL.warn ? 'WARNING' : 'NORMAL'; }
+function mins(steps) { const m = steps * STEP_MIN; return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`; }
+
+function reset() {
+  S = { lake: makeLake(11), model: trainModel(30, 7), net: rng(5), step: 0, seq: 48210,
+        rains: [], hs: [], rec: [], fc: [], alerts: [], nextId: 1, link: true, forced: false, buffer: 0, outageAt: null,
+        wet: 0, wetAir: 0, cnt: { w: 0, c: 0 }, ev: null, lastEv: null, syncs: 0 };
+  S.trainRmse = Math.sqrt(S.model.mse); S.trainRows = S.model.rows;
+  for (let i = 0; i < 84; i++) { if (i === 22) S.lake.queue.push(...SCENARIOS.thunder); tick(true); }
+  render(true);
+}
+
+function raise(kind, sev, value, msg) {
+  const a = { id: S.nextId++, step: S.step, source: kind, severity: sev, value, msg, sent: S.link ? S.step : null, isNew: true };
+  S.alerts.unshift(a);
+  return a;
+}
+
+function tick(silent) {
+  const o = lakeStep(S.lake);
+  const prevH = S.hs.length ? S.hs[S.hs.length - 1] : o.h;
+  if (S.hs.length) rlsUpdate(S.model, features([...S.rains, o.rain], S.rains.length, prevH), o.h - prevH);
+  S.rains.push(o.rain); S.hs.push(o.h); S.step++; S.seq++;
+  if (S.rains.length > 400) { S.rains.shift(); S.hs.shift(); S.rec.shift(); }
+
+  // 4G drops often in heavy thunderstorms and comes back once the cell passes
+  const was = S.link;
+  if (S.forced) S.link = false;
+  else if (S.link && o.I >= 35 && S.net() < 0.3) S.link = false;
+  else if (!S.link && o.I < 35 && S.net() < 0.35) S.link = true;
+  if (was && !S.link) S.outageAt = S.step;
+  if (!S.link) S.buffer++;
+  else if (S.buffer > 0) {
+    for (const a of S.alerts) if (a.sent === null) a.sent = S.step;   // queued alerts go first
+    S.buffer = Math.max(0, S.buffer - 30);
+    if (S.buffer === 0) { S.syncs++; S.outageAt = null; }
+  }
+
+  // other channels follow the storm loosely, for the reading panel
+  S.wet += (Math.min(1, o.I / 40) - S.wet) * 0.12; S.wetAir += (Math.min(1, o.I / 25) - S.wetAir) * 0.35;
+  const n = () => (S.lake.r() - 0.5);
+  S.rec.push({ link: S.link, r: {
+    water_temp_c: 30.6 - 1.3 * S.wet + n() * 0.1, ph: 7.2 - 0.45 * S.wet + n() * 0.04, dissolved_oxygen_mgl: 6.8 - 1.6 * S.wet + n() * 0.1,
+    turbidity_ntu: 14 + 95 * S.wet + n() * 2, water_level_cm: o.h, rainfall_mm: o.rain, humidity_pct: Math.min(99, 74 + 23 * S.wetAir + n()),
+    air_temp_c: 32.4 - 6.5 * S.wetAir + n() * 0.2 } });
+
+  // forecast and predictive alerts
+  S.fc = forecast(S.model, S.rains, S.hs);
+  const h = o.h, peakI = S.fc.reduce((b, p, i) => p.h > S.fc[b].h ? i : b, 0), peak = S.fc[peakI].h;
+  const tci = S.fc.findIndex(p => p.h >= LVL.crit);
+  S.cnt.w = peak >= LVL.warn && h < LVL.warn ? S.cnt.w + 1 : 0;
+  S.cnt.c = peak >= LVL.crit && h < LVL.crit ? S.cnt.c + 1 : 0;   // 3 agreeing forecasts in a row before a flood alert
+  const ev = S.ev || (S.ev = { start: S.step, peak: h });
+  ev.peak = Math.max(ev.peak, h);
+  if (S.cnt.w >= 2 && ev.fw == null) { ev.fw = S.step; raise('FORECAST', 'WARNING', peak, `Level forecast to pass 130 cm, peaking at ${peak.toFixed(0)} cm around ${fmtTime(S.step + peakI + 1)}`); }
+  if (S.cnt.c >= 3 && ev.fc == null) { ev.fc = S.step; raise('FORECAST', 'CRITICAL', peak, `Flood forecast: 145 cm in about ${mins(tci + 1)}. Park warning lights on.`); }
+  if (h >= LVL.warn && ev.tw == null) { ev.tw = S.step; raise('EDGE', 'WARNING', h, 'Level crossed the 130 cm warning line'); }
+  if (h >= LVL.crit && ev.tc == null) { ev.tc = S.step; raise('EDGE', 'CRITICAL', h, 'Level crossed the 145 cm flood line'); }
+  // an event ends after an hour of low level and a calm forecast
+  S.calm = h < LVL.warn - 4 && peak < LVL.warn ? (S.calm || 0) + 1 : 0;
+  const quiet = S.calm >= 12;
+  if (quiet && (ev.fw != null || ev.tw != null)) { ev.end = S.step; S.lastEv = ev; S.ev = null; for (const a of S.alerts) a.resolved = true; }
+  else if (quiet) S.ev = null;
+  if (!silent) render(false);
+}
+
+// ---- rendering ----
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function render(full) {
+  const n = S.hs.length, h = S.hs[n - 1], st = status(h);
+  $('clock').textContent = `${fmtTime(S.step)} · 8 Dec 2026`;
+  const dh = h - S.hs[Math.max(0, n - 13)];
+  $('v-level').innerHTML = `${h.toFixed(1)} <small>cm</small>`;
+  $('d-level').innerHTML = `<span class="pill ${st}">${st}</span> ${dh >= 0 ? '+' : ''}${dh.toFixed(1)} cm in the last hour`;
+  $('k-level').dataset.s = st;
+
+  const peakI = S.fc.reduce((b, p, i) => p.h > S.fc[b].h ? i : b, 0), peak = S.fc[peakI].h, pst = status(peak);
+  $('v-peak').innerHTML = `${peak.toFixed(0)} <small>cm</small>`;
+  $('d-peak').innerHTML = peak > h + 0.5 ? `<span class="pill ${pst}">${pst}</span> around ${fmtTime(S.step + peakI + 1)}` : 'Level steady or falling';
+  $('k-peak').dataset.s = pst;
+
+  const tci = S.fc.findIndex(p => p.h >= LVL.crit);
+  if (h >= LVL.crit) { $('v-ttc').textContent = 'Flooding now'; $('d-ttc').textContent = 'Level is above 145 cm'; $('k-ttc').dataset.s = 'CRITICAL'; }
+  else if (tci >= 0) { $('v-ttc').textContent = mins(tci + 1); $('d-ttc').textContent = `Expected to reach 145 cm at ${fmtTime(S.step + tci + 1)}`; $('k-ttc').dataset.s = 'CRITICAL'; }
+  else { $('v-ttc').textContent = 'Not expected'; $('d-ttc').textContent = 'No flood level in the next 3 h'; $('k-ttc').dataset.s = 'NORMAL'; }
+
+  $('v-link').textContent = S.link ? (S.buffer ? 'Syncing' : 'Online') : 'Offline';
+  $('d-link').textContent = S.link
+    ? (S.buffer ? `${S.buffer} buffered readings uploading` : `4G · MQTT over TLS · ${S.syncs} outage${S.syncs === 1 ? '' : 's'} recovered`)
+    : `${S.buffer} readings buffered since ${fmtTime(S.outageAt)}. Forecasting continues on site.`;
+  $('k-link').dataset.s = S.link ? 'NORMAL' : 'WARNING';
+
+  const raining = S.lake.queue.length > 0;
+  $('btn-thunder').disabled = $('btn-monsoon').disabled = raining;
+  $('rain-status').textContent = raining ? `Raining, about ${mins(S.lake.queue.length)} left` : '';
+
+  renderLead(); renderReading(); renderAlerts(); renderModel(); draw();
+}
+
+function renderLead() {
+  const ev = S.ev && (S.ev.fw != null || S.ev.tw != null) ? S.ev : S.lastEv;
+  const big = $('lead-big'), txt = $('lead-txt'), cmp = $('lead-cmp');
+  if (!ev) { big.textContent = '--'; txt.textContent = 'Start a storm to see how much earlier the forecast warns than the threshold alert from Deliverable 2.'; cmp.innerHTML = ''; return; }
+  const live = ev === S.ev, rows = [];
+  rows.push(['Forecast warning (130 cm)', ev.fw != null ? fmtTime(ev.fw) : 'not issued']);
+  rows.push(['Level reached 130 cm', ev.tw != null ? fmtTime(ev.tw) : (live ? 'not yet' : 'never')]);
+  rows.push(['Flood forecast (145 cm)', ev.fc != null ? fmtTime(ev.fc) : 'not issued']);
+  rows.push(['Level reached 145 cm', ev.tc != null ? fmtTime(ev.tc) : (live ? 'not yet' : 'never')]);
+  cmp.innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><span class="mono">${b}</span></div>`).join('');
+  const label = live ? 'Current storm' : `Last storm, peak ${ev.peak.toFixed(0)} cm`;
+  if (ev.fw != null && ev.tw != null) {
+    big.textContent = `${(ev.tw - ev.fw) * STEP_MIN} min`;
+    txt.textContent = `${label}. The forecast warned this much earlier than the threshold alert would have.` + (ev.fc != null && ev.tc != null ? ` Flood warning came ${(ev.tc - ev.fc) * STEP_MIN} min before the level reached 145 cm.` : '');
+  } else if (ev.fw != null) {
+    big.textContent = live ? 'Watching' : 'Precaution';
+    txt.textContent = live ? `${label}. The forecast has warned; the level has not reached 130 cm yet.` : `${label}. The forecast warned but the level stayed below 130 cm, so staff checked the site with no flooding.`;
+  } else { big.textContent = '0 min'; txt.textContent = `${label}. The level rose faster than the forecast could warn.`; }
+}
+
+function renderReading() {
+  const r = S.rec[S.rec.length - 1].r, st = status(r.water_level_cm);
+  $('seq').textContent = `seq_no ${S.seq}`;
+  const rows = [
+    ['reading_ts', isoUtc(S.step), ''], ['Water level', r.water_level_cm.toFixed(1), 'cm'], ['Rainfall (5 min)', r.rainfall_mm.toFixed(1), 'mm'],
+    ['Turbidity', r.turbidity_ntu.toFixed(0), 'NTU'], ['pH', r.ph.toFixed(2), ''], ['Dissolved oxygen', r.dissolved_oxygen_mgl.toFixed(1), 'mg/L'],
+    ['Water temperature', r.water_temp_c.toFixed(1), '°C'], ['Air temperature', r.air_temp_c.toFixed(1), '°C'], ['Humidity', r.humidity_pct.toFixed(0), '%'],
+  ];
+  $('reading').innerHTML = rows.map(([k, v, u]) => `<dt>${k}</dt><dd class="mono">${v}${u ? ' ' + u : ''}</dd>`).join('') +
+    `<dt>alert_status</dt><dd><span class="pill ${st}">${st}</span></dd><dt>synced</dt><dd class="mono">${S.link ? 1 : 0}</dd>`;
+}
+
+function renderAlerts() {
+  const list = S.alerts.slice(0, 8);
+  $('alerts').innerHTML = list.length ? list.map(a => {
+    const sent = a.sent === null ? '<span class="pill WARNING">Queued</span>' : `<span class="mono">${fmtTime(a.sent)}</span>${a.sent > a.step ? ' <span class="muted">(after outage)</span>' : ''}`;
+    const row = `<tr class="${a.isNew ? 'new' : ''}"><td class="n">${fmtTime(a.step)}</td><td><span class="pill ${a.source}">${a.source}</span></td><td><span class="pill ${a.severity}">${a.severity}</span></td><td class="n">${a.value.toFixed(1)} cm</td><td>${a.msg}${a.resolved ? ' <span class="pill RESOLVED">Resolved</span>' : ''}</td><td>${sent}</td></tr>`;
+    a.isNew = false; return row;
+  }).join('') : '<tr><td colspan="6" class="empty">No alerts yet.</td></tr>';
+}
+
+function renderModel() {
+  const M = S.model;
+  $('coef').innerHTML = '<span class="eyebrow">Input</span><span class="eyebrow" style="text-align:right">Weight</span>' +
+    FEAT.map((f, i) => `<span>${f}</span><span>${M.theta[i] >= 0 ? '+' : ''}${M.theta[i].toFixed(4)}</span>`).join('');
+  $('fit').textContent = `Trained on ${S.trainRows.toLocaleString()} readings (error ${S.trainRmse.toFixed(2)} cm per 5-min step). Live error over recent readings: ${Math.sqrt(M.mse).toFixed(2)} cm.`;
+}
+
+function draw() {
+  const cv = $('chart'), box = cv.parentElement, dpr = window.devicePixelRatio || 1;
+  const W = box.clientWidth, H = box.clientHeight;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const C = { fg: css('--fg'), muted: css('--muted'), line: css('--line'), acc: css('--accent'), rain: css('--rain'), warn: css('--warn'), crit: css('--crit') };
+  const L = 44, R = 12, T = 30, rainH = Math.max(56, H * 0.2), gap = 26, B = 22;
+  const wTop = T, wBot = H - B - rainH - gap, rTop = wBot + gap, rBot = H - B;
+  const n = S.hs.length, nh = Math.min(HIST, n), total = HIST + HORIZON;
+  const x = i => L + (i / total) * (W - L - R);          // i = 0..total, HIST is "now"
+  const yMin = 95, yMax = 160, y = v => wBot - (Math.min(yMax, Math.max(yMin, v)) - yMin) / (yMax - yMin) * (wBot - wTop);
+  const rMax = 10, yr = v => rBot - Math.min(rMax, v) / rMax * (rBot - rTop);
+  g.font = `11px ${css('--f-data')}`; g.textBaseline = 'middle';
+
+  // 4G outage lane above the plot
+  const off = HIST - nh, lane = 6;
+  g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText('4G', L - 6, lane + 3);
+  g.strokeStyle = C.line; g.lineWidth = 1; g.beginPath(); g.moveTo(L, lane + 3); g.lineTo(x(HIST), lane + 3); g.stroke();
+  g.fillStyle = C.warn;
+  for (let i = 0; i < nh; i++) if (!S.rec[S.rec.length - nh + i].link) g.fillRect(x(off + i), lane, x(off + i + 1) - x(off + i) + 0.5, 6);
+
+  // grid + y labels
+  g.strokeStyle = C.line; g.lineWidth = 1; g.fillStyle = C.muted; g.textAlign = 'right';
+  for (let v = 100; v <= 160; v += 10) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); g.fillText(v, L - 6, y(v)); }
+  g.save(); g.textAlign = 'left'; g.fillText('cm', L + 4, wTop - 10); g.restore();
+  for (const v of [0, 5, 10]) { g.fillText(v, L - 6, yr(v)); }
+  g.beginPath(); g.moveTo(L, rBot); g.lineTo(W - R, rBot); g.stroke();
+  g.save(); g.textAlign = 'left'; g.fillText('mm / 5 min', L + 4, rTop - 9); g.restore();
+
+  // time labels on the hour
+  g.textAlign = 'center';
+  for (let i = 0; i <= total; i++) {
+    const stp = S.step - HIST + i;
+    if ((stp * STEP_MIN) % 60 === 0 && (W > 560 || (stp * STEP_MIN) % 120 === 0)) { g.fillStyle = C.muted; g.fillText(fmtTime(stp), x(i), H - 9); g.strokeStyle = C.line; g.beginPath(); g.moveTo(x(i), rBot); g.lineTo(x(i), rBot + 4); g.stroke(); }
+  }
+
+  // thresholds, labelled at the right edge where the forecast is
+  const thr = (v, col, dash, label) => { g.strokeStyle = col; g.setLineDash(dash); g.lineWidth = 1.5; g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); g.setLineDash([]);
+    g.fillStyle = col; g.textAlign = 'right'; g.fillText(label, W - R - 2, y(v) - 8); };
+  thr(LVL.warn, C.warn, [6, 4], 'Warning 130'); thr(LVL.crit, C.crit, [], 'Flood 145');
+  g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText('Spillway crest 110', W - R - 2, y(LVL.crest) + 9);
+
+  // rain bars
+  const bw = Math.max(1, (W - L - R) / total - 1);
+  g.fillStyle = C.rain;
+  for (let i = 0; i < nh; i++) { const v = S.rains[n - nh + i]; if (v > 0.02) g.fillRect(x(off + i), yr(v), bw, rBot - yr(v)); }
+
+  // forecast band + line
+  const fx = k => x(HIST + k), fc = S.fc;
+  g.fillStyle = C.acc; g.globalAlpha = 0.14; g.beginPath(); g.moveTo(fx(0), y(S.hs[n - 1]));
+  fc.forEach((p, k) => g.lineTo(fx(k + 1), y(p.h + p.band)));
+  for (let k = fc.length - 1; k >= 0; k--) g.lineTo(fx(k + 1), y(fc[k].h - fc[k].band));
+  g.closePath(); g.fill(); g.globalAlpha = 1;
+  g.strokeStyle = C.acc; g.lineWidth = 2.2; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(fx(0), y(S.hs[n - 1]));
+  fc.forEach((p, k) => g.lineTo(fx(k + 1), y(p.h))); g.stroke(); g.setLineDash([]);
+
+  // measured line
+  g.strokeStyle = C.fg; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i < nh; i++) { const X = x(off + i + 1), Y = y(S.hs[n - nh + i]); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
+  g.stroke();
+
+  // now marker
+  g.strokeStyle = C.muted; g.lineWidth = 1; g.beginPath(); g.moveTo(x(HIST), wTop - 4); g.lineTo(x(HIST), rBot); g.stroke();
+  g.fillStyle = C.fg; g.beginPath(); g.arc(x(HIST), y(S.hs[n - 1]), 4, 0, 7); g.fill();
+  g.fillStyle = C.muted; g.textAlign = 'right'; g.fillText('Now', x(HIST) - 5, wTop - 10);
+  g.textAlign = 'left'; g.fillText('Forecast →', x(HIST) + 5, wTop - 10);
+}
+
+// ---- controls ----
+function loop() { clearTimeout(timer); if (playing) timer = setTimeout(() => { tick(false); loop(); }, +$('speed').value); }
+$('play').onclick = () => { playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play'; loop(); };
+$('speed').onchange = loop;
+$('btn-thunder').onclick = () => { S.lake.queue.push(...SCENARIOS.thunder); render(false); };
+$('btn-monsoon').onclick = () => { S.lake.queue.push(...SCENARIOS.monsoon); render(false); };
+$('btn-outage').onclick = () => { S.forced = !S.forced; $('btn-outage').classList.toggle('on', S.forced); $('btn-outage').textContent = S.forced ? 'Restore 4G link' : 'Cut 4G link'; };
+$('btn-reset').onclick = () => { S.forced = false; $('btn-outage').classList.remove('on'); $('btn-outage').textContent = 'Cut 4G link'; reset(); };
+window.addEventListener('resize', () => draw());
+document.fonts?.ready.then(() => draw());
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => draw());
+new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+reset(); loop();
+</script>
+
+</body>
+</html>
