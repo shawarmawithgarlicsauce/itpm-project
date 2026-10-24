@@ -3,134 +3,139 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#eef3f3" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0c181b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#17191b" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#24282c" media="(prefers-color-scheme: dark)">
 <meta name="description" content="Flash-flood forecaster prototype for a smart lake monitoring system: predicts water level 3 hours ahead on the edge gateway.">
 <title>Lake Flood Forecaster</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600;700&display=swap">
 <style>
-/* Layout: control-room strip of gauges over one wide hydrograph, panels and the alert log beneath */
+/* Layout: a gauging-station sheet. A status band that takes the lake's state, one live sentence, the hydrograph
+   with a staff-gauge axis, then the log and notes as ruled report sections. No cards. */
 :root {
-  --bg: #eef3f3; --surface: #ffffff; --fg: #13262b; --muted: #576c71; --line: #d3dedf;
-  --accent: #0e6f82; --rain: #5f86b0; --ok: #2b7a4b; --warn: #a96b10; --crit: #bf3426;
-  --ok-bg: #e2f1e7; --warn-bg: #fbefd9; --crit-bg: #fbe3df;
-  --f-display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
-  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
-  --f-data: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  --bg: #f4f3ee; --surface: #fbfaf7; --fg: #17191b; --muted: #5b5f63; --line: #d8d6cd;
+  --accent: #1d5ea8; --rain: #7f9cc2; --ok: #2a7548; --warn: #965800; --crit: #b42d1c; --on-state: #ffffff;
+  --band-bg: #17191b; --band-fg: #f4f3ee;
+  --f-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --f-data: "IBM Plex Mono", Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0c181b; --surface: #132327; --fg: #e1edef; --muted: #8fa6ab; --line: #24393e;
-  --accent: #4cbfd4; --rain: #7ea7d2; --ok: #5cc489; --warn: #e3a94b; --crit: #f06c5c;
-  --ok-bg: #16342a; --warn-bg: #3a2c14; --crit-bg: #3d1b17; color-scheme: dark } }
+  --bg: #111315; --surface: #181b1e; --fg: #e9e7e0; --muted: #9b9ea1; --line: #2c3034;
+  --accent: #6fa7ea; --rain: #56739a; --ok: #5cbf86; --warn: #e2a03c; --crit: #f0705f; --on-state: #111315;
+  --band-bg: #24282c; --band-fg: #e9e7e0; color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0c181b; --surface: #132327; --fg: #e1edef; --muted: #8fa6ab; --line: #24393e;
-  --accent: #4cbfd4; --rain: #7ea7d2; --ok: #5cc489; --warn: #e3a94b; --crit: #f06c5c;
-  --ok-bg: #16342a; --warn-bg: #3a2c14; --crit-bg: #3d1b17; color-scheme: dark }
+  --bg: #111315; --surface: #181b1e; --fg: #e9e7e0; --muted: #9b9ea1; --line: #2c3034;
+  --accent: #6fa7ea; --rain: #56739a; --ok: #5cbf86; --warn: #e2a03c; --crit: #f0705f; --on-state: #111315;
+  --band-bg: #24282c; --band-fg: #e9e7e0; color-scheme: dark }
 
 * { box-sizing: border-box }
-html { scrollbar-color: var(--line) var(--bg); accent-color: var(--accent); caret-color: var(--accent) }
+html { scrollbar-color: var(--line) var(--bg); accent-color: var(--accent); caret-color: var(--accent); scroll-padding-top: 56px }
 body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--f-body); margin: 0 }
 ::selection { background: var(--accent); color: var(--bg) }
 a { color: var(--accent); text-underline-offset: 3px }
-.wrap { max-width: 1180px; margin: 0 auto; padding-block: 24px 48px;
-  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  display: grid; gap: 18px; }
-h1, h2, h3 { font-family: var(--f-display); margin: 0; text-wrap: balance; letter-spacing: .01em }
-h1 { font-size: 1.9rem; font-weight: 700; line-height: 1.1 }
-h2 { font-size: 1.15rem; font-weight: 600 }
-.eyebrow { font: 600 .74rem/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted) }
+h1, h2, h3, p { margin: 0 }
+h1, h2, h3 { text-wrap: balance }
 .mono { font-family: var(--f-data); font-variant-numeric: tabular-nums }
-p { margin: 0 }
 .muted { color: var(--muted) }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
 
-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px 24px }
-header .intro { display: grid; gap: 10px; min-width: 0 }
-header .sub { color: var(--muted); max-width: 62ch }
-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; color: var(--muted); font-size: .88rem; padding-top: 6px }
-.clock { text-align: right }
-.clock .t { font: 500 1.5rem/1.1 var(--f-data); font-variant-numeric: tabular-nums }
+/* status band: ink when calm, amber on a warning, red on a flood */
+.band { position: sticky; top: 0; z-index: 2; background: var(--band-bg); color: var(--band-fg); transition: background-color .3s ease-out, color .3s ease-out }
+.band[data-s="WARNING"] { background: var(--warn); color: var(--on-state) }
+.band[data-s="CRITICAL"] { background: var(--crit); color: var(--on-state) }
+.band .in { max-width: 1180px; margin: 0 auto; padding-block: 9px; display: flex; flex-wrap: wrap; gap: 2px 22px; align-items: baseline; font-size: .88rem }
+.band .state { font-weight: 700; min-width: 9.5em }
+.band .clock { margin-left: auto; font-family: var(--f-data); font-variant-numeric: tabular-nums }
 
-.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px }
-.controls .grp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
-.controls .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px }
-button, select { font: 600 .9rem var(--f-body); color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent }
-button:hover:not(:disabled) { border-color: var(--accent) }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 32px 40px; display: grid; gap: 28px }
+header { display: grid; gap: 6px }
+h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -.01em }
+.sub { color: var(--muted); max-width: 70ch }
+.now { font-size: 2rem; line-height: 1.22; font-weight: 500; letter-spacing: -.025em; max-width: 36ch; text-wrap: pretty; min-height: 2.44em }
+.now b { font-weight: 700; font-variant-numeric: tabular-nums }
+.now .w { color: var(--warn) } .now .c { color: var(--crit) }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; padding-block: 12px; border-block: 1px solid var(--line) }
+.grp { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.grp-l { color: var(--muted); font-size: .88rem; margin-right: 2px }
+button, select { font: 500 .9rem/1.2 var(--f-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; cursor: pointer;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: border-color .15s ease-out, background-color .15s ease-out }
+button:hover:not(:disabled), select:hover { border-color: var(--fg) }
 button:active:not(:disabled) { transform: translateY(1px) }
-button:disabled { cursor: default; color: var(--muted); border-style: dashed }
+button:disabled { cursor: default; color: var(--muted); background: transparent }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg) }
-button.on { background: var(--crit-bg); border-color: var(--crit); color: var(--crit) }
-label.inline { display: flex; gap: 6px; align-items: center; font-size: .9rem; color: var(--muted) }
+button.primary { background: var(--fg); border-color: var(--fg); color: var(--bg); min-width: 5.5em }
+button.on { background: var(--crit); border-color: var(--crit); color: var(--on-state) }
+label.inline { display: flex; gap: 8px; align-items: center; font-size: .88rem; color: var(--muted) }
 
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 6px; align-content: start; border-top: 3px solid var(--line) }
-.kpi .v { font: 600 1.9rem/1 var(--f-display); font-variant-numeric: tabular-nums }
-.kpi .v small { font-size: .95rem; color: var(--muted); font-weight: 500 }
-.kpi .d { font-size: .88rem; color: var(--muted) }
-.kpi[data-s="WARNING"] { border-top-color: var(--warn) } .kpi[data-s="CRITICAL"] { border-top-color: var(--crit) } .kpi[data-s="NORMAL"] { border-top-color: var(--ok) }
-.pill { display: inline-block; font: 600 .72rem/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; vertical-align: middle }
-.pill.NORMAL, .pill.SUCCESS, .pill.RESOLVED { background: var(--ok-bg); color: var(--ok) }
-.pill.WARNING, .pill.OPEN-W { background: var(--warn-bg); color: var(--warn) }
-.pill.CRITICAL { background: var(--crit-bg); color: var(--crit) }
-.pill.FORECAST { background: transparent; color: var(--accent); border: 1px solid var(--accent) }
-.pill.EDGE { background: transparent; color: var(--muted); border: 1px solid var(--line) }
+.sec { border-top: 2px solid var(--fg); padding-top: 12px; display: grid; gap: 12px; min-width: 0; align-content: start }
+h2 { font-size: 1rem; font-weight: 700 }
+h3 { font-size: .92rem; font-weight: 700; margin-bottom: 6px }
+.sec-h { display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between; align-items: baseline }
+.note { color: var(--muted); font-size: .86rem; max-width: 80ch }
+code { font-family: var(--f-data); font-size: .82rem; background: color-mix(in srgb, var(--fg) 7%, transparent); padding: 1px 4px; border-radius: 3px }
 
-.main { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; align-items: stretch }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; min-width: 0; align-content: start }
-.chart-panel { display: flex; flex-direction: column }
-.panel-h { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; align-items: baseline }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .82rem; color: var(--muted) }
-.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px }
-.chart-box { position: relative; width: 100%; flex: 1; min-height: 380px }
+.main, .lower { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px 36px }
+.main { align-items: stretch }
+.chart-sec { display: flex; flex-direction: column }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .82rem; color: var(--muted) }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px }
+.chart-box { position: relative; width: 100%; flex: 1; min-height: 420px }
 canvas { display: block; width: 100%; height: 100% }
-.side { display: grid; gap: 18px; min-width: 0 }
+.side { display: grid; gap: 28px; min-width: 0; align-content: start }
 
-.lead { display: grid; gap: 10px }
-.lead .big { font: 700 2.6rem/1 var(--f-display); color: var(--accent); font-variant-numeric: tabular-nums }
-.compare { display: grid; gap: 6px; font-size: .9rem }
-.compare div { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding-top: 6px; border-top: 1px solid var(--line) }
+.lead .big { font-size: 3.2rem; line-height: 1; font-weight: 600; letter-spacing: -.035em; color: var(--accent); font-variant-numeric: tabular-nums }
+.rows { display: grid; grid-template-columns: 1fr auto; font-size: .9rem; margin: 0 }
+.rows > * { padding: 5px 0; border-bottom: 1px solid var(--line); margin: 0 }
+.rows > :nth-child(even) { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums }
+.rows .k { font-family: var(--f-data); font-size: .8rem; color: var(--muted) }
+#lead-cmp, dl.rows { border-top: 1px solid var(--line) }
+.rows .h { font-size: .8rem; font-weight: 600; color: var(--muted); font-family: var(--f-body); border-bottom-color: var(--fg) }
 
-.reading { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .9rem; margin: 0 }
-.reading dt { color: var(--muted) } .reading dd { margin: 0; text-align: right }
-.reading .k { font-family: var(--f-data); font-size: .78rem; color: var(--muted) }
+.tag { font: 600 .8rem/1.2 var(--f-body); white-space: nowrap }
+.tag::before { content: ""; display: inline-block; width: .55em; height: .55em; margin-right: .4em; background: currentColor; vertical-align: .05em }
+.tag.NORMAL { color: var(--ok) } .tag.WARNING { color: var(--warn) } .tag.CRITICAL { color: var(--crit) }
+.tag.FORECAST { color: var(--accent) } .tag.EDGE { color: var(--muted) }
+.tag.RESOLVED { color: var(--muted); font-weight: 500 } .tag.RESOLVED::before { display: none }
 
-.lower { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; align-items: start }
 .tbl { overflow-x: auto }
-table { width: 100%; border-collapse: collapse; font-size: .88rem }
-th { font: 600 .74rem var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
-td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: .88rem }
+th { font-size: .8rem; font-weight: 600; color: var(--muted); text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--fg); white-space: nowrap }
+td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top }
 td.n { font-family: var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap }
 tr.new td { animation: flash 1.2s ease-out }
-@keyframes flash { from { background: var(--warn-bg) } to { background: transparent } }
-.empty { color: var(--muted); padding: 14px 8px }
+@keyframes flash { from { background: color-mix(in srgb, var(--warn) 20%, transparent) } to { background: transparent } }
+.empty { color: var(--muted) }
 
-.coef { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-size: .88rem }
-.coef span:nth-child(even) { font-family: var(--f-data); font-variant-numeric: tabular-nums; text-align: right }
+.fit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 36px }
+.fit ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: .92rem }
 
-.fit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px }
-.fit ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .92rem }
-.fit code, .panel code { font-family: var(--f-data); font-size: .82rem; background: var(--bg); padding: 1px 4px; border-radius: 3px }
+footer { max-width: 1180px; margin: 0 auto; padding-block: 14px 32px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 24px; color: var(--muted); font-size: .86rem }
 
-@media (max-width: 900px) { .main, .lower, .fit { grid-template-columns: minmax(0, 1fr) } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
-@media (max-width: 520px) { .chart-box { min-height: 300px } .clock { text-align: left } .controls .sep { display: none } }
-@media (prefers-reduced-motion: reduce) { tr.new td { animation: none } }
+@media (max-width: 960px) { .main, .lower, .fit { grid-template-columns: minmax(0, 1fr) } }
+@media (max-width: 560px) { .now { font-size: 1.45rem } .chart-box { min-height: 330px } .band .clock { margin-left: 0 } .lead .big { font-size: 2.6rem } }
+@media (prefers-reduced-motion: reduce) { tr.new td { animation: none } .band, button { transition: none } }
 </style>
 </head>
 <body>
 
-<main class="wrap">
+<div class="band" id="band">
+  <div class="in gutter">
+    <span class="state" id="b-state">Normal</span>
+    <span>LAKE-N03 · spillway gauge</span>
+    <span id="b-link"></span>
+    <span class="clock" id="clock">--</span>
+  </div>
+</div>
+
+<main class="wrap gutter">
   <header>
-    <div class="intro">
-      <h1>Flash-flood forecaster on the edge gateway</h1>
-      <p class="sub">The gateway predicts the water level 3 hours ahead from rainfall and level history, so the park team and DOE are warned before the lake overflows, even while a thunderstorm has cut the 4G link.</p>
-    </div>
-    <div class="clock">
-      <p class="eyebrow">Node LAKE-N03 · Spillway · simulated time (MYT)</p>
-      <p class="t" id="clock">--</p>
-    </div>
+    <h1>Flash-flood forecaster on the edge gateway</h1>
+    <p class="sub">The lake's Raspberry Pi gateway predicts the water level 3 hours ahead from rainfall and level history, so the park team and DOE are warned before the lake overflows, even while a thunderstorm has cut the 4G link. Times are simulated, in MYT.</p>
   </header>
+
+  <p class="now" id="now">--</p>
 
   <div class="controls" role="group" aria-label="Simulation controls">
     <div class="grp">
@@ -143,60 +148,51 @@ tr.new td { animation: flash 1.2s ease-out }
         </select>
       </label>
     </div>
-    <span class="sep"></span>
     <div class="grp">
-      <span class="eyebrow">Start weather</span>
+      <span class="grp-l">Weather</span>
       <button type="button" id="btn-thunder">Afternoon thunderstorm (~38 mm)</button>
       <button type="button" id="btn-monsoon">Monsoon downpour (~95 mm)</button>
-      <span class="muted" style="font-size:.88rem" id="rain-status" role="status"></span>
+      <span class="muted" style="font-size:.86rem" id="rain-status" role="status"></span>
     </div>
-    <span class="sep"></span>
     <div class="grp">
       <button type="button" id="btn-outage">Cut 4G link</button>
       <button type="button" id="btn-reset">Reset</button>
     </div>
   </div>
 
-  <section class="kpis" aria-label="Current status">
-    <div class="kpi" id="k-level"><span class="eyebrow">Water level now</span><span class="v mono" id="v-level">--</span><span class="d" id="d-level"></span></div>
-    <div class="kpi" id="k-peak"><span class="eyebrow">Forecast peak, next 3 h</span><span class="v mono" id="v-peak">--</span><span class="d" id="d-peak"></span></div>
-    <div class="kpi" id="k-ttc"><span class="eyebrow">Time to flood level</span><span class="v" id="v-ttc">--</span><span class="d" id="d-ttc"></span></div>
-    <div class="kpi" id="k-link"><span class="eyebrow">Uplink to AWS</span><span class="v" id="v-link">--</span><span class="d" id="d-link"></span></div>
-  </section>
-
   <div class="main">
-    <section class="panel chart-panel" aria-labelledby="h-chart">
-      <div class="panel-h">
-        <h2 id="h-chart">Water level and rainfall: last 6 h and next 3 h</h2>
+    <section class="sec chart-sec" aria-labelledby="h-chart">
+      <div class="sec-h">
+        <h2 id="h-chart">Water level and rainfall, last 6 h and next 3 h</h2>
         <div class="legend" aria-hidden="true">
           <span><i style="border-color:var(--fg)"></i>Measured</span>
-          <span><i style="border-color:var(--accent);border-top-style:dashed"></i>Forecast ± error band</span>
+          <span><i style="border-color:var(--accent);border-top-style:dashed"></i>Forecast and error band</span>
           <span><i style="border-color:var(--warn);border-top-style:dashed"></i>Warning 130 cm</span>
           <span><i style="border-color:var(--crit)"></i>Flood 145 cm</span>
         </div>
       </div>
       <div class="chart-box"><canvas id="chart" role="img" aria-label="Hydrograph of measured and forecast water level with rainfall bars"></canvas></div>
-      <p class="muted" style="font-size:.85rem">The “4G” strip at the top shows when the link was down. Readings taken then sit in the gateway's SQLite buffer and are sent oldest first when the link returns.</p>
+      <p class="note">The level axis is drawn as the staff gauge at the spillway. The “4G” strip at the top marks when the link was down: readings taken then sit in the gateway's SQLite buffer and are sent oldest first when the link returns.</p>
     </section>
 
     <div class="side">
-      <section class="panel lead" aria-labelledby="h-lead">
+      <section class="sec lead" aria-labelledby="h-lead">
         <h2 id="h-lead">Warning time gained</h2>
         <p class="big" id="lead-big">--</p>
         <p class="muted" id="lead-txt"></p>
-        <div class="compare" id="lead-cmp"></div>
+        <div class="rows" id="lead-cmp"></div>
       </section>
 
-      <section class="panel" aria-labelledby="h-read">
-        <div class="panel-h"><h2 id="h-read">Latest reading</h2><span class="k mono muted" style="font-size:.78rem" id="seq">--</span></div>
-        <dl class="reading" id="reading"></dl>
+      <section class="sec" aria-labelledby="h-read">
+        <div class="sec-h"><h2 id="h-read">Latest reading</h2><span class="mono muted" style="font-size:.8rem" id="seq">--</span></div>
+        <dl class="rows" id="reading"></dl>
       </section>
     </div>
   </div>
 
   <div class="lower">
-    <section class="panel" aria-labelledby="h-alerts">
-      <div class="panel-h"><h2 id="h-alerts">Alert log</h2><span class="muted" style="font-size:.85rem">Rows as stored in the <code>alert</code> table</span></div>
+    <section class="sec" aria-labelledby="h-alerts">
+      <div class="sec-h"><h2 id="h-alerts">Alert log</h2><span class="note">Rows as stored in the <code>alert</code> table</span></div>
       <div class="tbl">
         <table>
           <thead><tr><th>Reading time</th><th>Source</th><th>Severity</th><th>Value</th><th>What happened</th><th>Sent to SNS</th></tr></thead>
@@ -205,19 +201,19 @@ tr.new td { animation: flash 1.2s ease-out }
       </div>
     </section>
 
-    <section class="panel" aria-labelledby="h-model">
+    <section class="sec" aria-labelledby="h-model">
       <h2 id="h-model">The forecasting model</h2>
       <p style="font-size:.92rem">A linear model predicts the level change every 5 minutes from recent rain and the current level. It starts from a fit to 30 days of archived readings and re-fits itself after every new reading (recursive least squares), so it adapts if the inlet silts up or the spillway is cleared.</p>
-      <div class="coef" id="coef"></div>
-      <p class="muted" style="font-size:.85rem" id="fit"></p>
+      <div class="rows" id="coef"></div>
+      <p class="note" id="fit"></p>
     </section>
   </div>
 
-  <section class="panel" aria-labelledby="h-fit">
+  <section class="sec" aria-labelledby="h-fit">
     <h2 id="h-fit">How this fits Deliverables 1 and 2</h2>
     <div class="fit">
       <div>
-        <h3 class="eyebrow" style="margin-bottom:8px">Where it runs</h3>
+        <h3>Where it runs</h3>
         <ul>
           <li>A Python service on the Raspberry Pi gateway, beside the existing threshold check. It reads <code>local_reading</code> from SQLite, so it keeps forecasting with no internet.</li>
           <li>If a flood is forecast while 4G is down, the gateway switches on the park's warning lights at once and queues the alert. Alerts are sent before buffered readings when the link returns.</li>
@@ -225,7 +221,7 @@ tr.new td { animation: flash 1.2s ease-out }
         </ul>
       </div>
       <div>
-        <h3 class="eyebrow" style="margin-bottom:8px">Schema changes</h3>
+        <h3>Schema changes</h3>
         <ul>
           <li><code>alert.source</code> gains a third value, <code>FORECAST</code>. For these rows <code>measured_value</code> holds the predicted peak.</li>
           <li>New table <code>flood_forecast</code>: <code>forecast_id</code>, <code>node_id</code> (FK), <code>issued_ts</code>, <code>predicted_peak_cm</code>, <code>predicted_peak_ts</code>, <code>minutes_to_critical</code>, <code>model_version</code>, <code>error_cm</code>.</li>
@@ -233,7 +229,7 @@ tr.new td { animation: flash 1.2s ease-out }
         </ul>
       </div>
       <div>
-        <h3 class="eyebrow" style="margin-bottom:8px">Backlog items covered</h3>
+        <h3>Backlog items covered</h3>
         <ul>
           <li><strong>ID10</strong> AI predictions: trained on the readings archived in S3.</li>
           <li><strong>ID04</strong> Water level trends: uses <code>water_level_cm</code> and <code>rainfall_mm</code>.</li>
@@ -242,14 +238,14 @@ tr.new td { animation: flash 1.2s ease-out }
         </ul>
       </div>
     </div>
-    <p class="muted" style="font-size:.85rem">All data on this page is simulated by a water-balance model of a 4-acre lake (about 1.6 ha) fed by a 26 ha park catchment. On site, rain ahead is unknown, so the forecast assumes the current intensity tapers off with a 30-minute half-life. MetMalaysia radar nowcasts could replace that assumption later.</p>
+    <p class="note">All data on this page is simulated by a water-balance model of a 4-acre lake (about 1.6 ha) fed by a 26 ha park catchment. On site, rain ahead is unknown, so the forecast assumes the current intensity tapers off with a 30-minute half-life. MetMalaysia radar nowcasts could replace that assumption later.</p>
   </section>
-
-  <footer>
-    <span>Smart Lake Monitoring System · TFB3033 IT Project Management, September 2026 trimester</span>
-    <a href="https://github.com/shawarmawithgarlicsauce/itpm-project">Source on GitHub</a>
-  </footer>
 </main>
+
+<footer class="gutter">
+  <span>Smart Lake Monitoring System · TFB3033 IT Project Management, September 2026 trimester</span>
+  <a href="https://github.com/shawarmawithgarlicsauce/itpm-project">Source on GitHub</a>
+</footer>
 
 <script>
 // ---- Lake + forecaster core (no DOM) ----
@@ -416,28 +412,27 @@ function tick(silent) {
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
 function render(full) {
-  const n = S.hs.length, h = S.hs[n - 1], st = status(h);
-  $('clock').textContent = `${fmtTime(S.step)} · 8 Dec 2026`;
-  const dh = h - S.hs[Math.max(0, n - 13)];
-  $('v-level').innerHTML = `${h.toFixed(1)} <small>cm</small>`;
-  $('d-level').innerHTML = `<span class="pill ${st}">${st}</span> ${dh >= 0 ? '+' : ''}${dh.toFixed(1)} cm in the last hour`;
-  $('k-level').dataset.s = st;
+  const n = S.hs.length, h = S.hs[n - 1], dh = h - S.hs[Math.max(0, n - 13)];
+  const peakI = S.fc.reduce((b, p, i) => p.h > S.fc[b].h ? i : b, 0), peak = S.fc[peakI].h;
+  const tci = S.fc.findIndex(p => p.h >= LVL.crit), at = k => fmtTime(S.step + k + 1);
 
-  const peakI = S.fc.reduce((b, p, i) => p.h > S.fc[b].h ? i : b, 0), peak = S.fc[peakI].h, pst = status(peak);
-  $('v-peak').innerHTML = `${peak.toFixed(0)} <small>cm</small>`;
-  $('d-peak').innerHTML = peak > h + 0.5 ? `<span class="pill ${pst}">${pst}</span> around ${fmtTime(S.step + peakI + 1)}` : 'Level steady or falling';
-  $('k-peak').dataset.s = pst;
+  // the band shows the worse of what is measured and what is forecast
+  const [bs, bt] = h >= LVL.crit ? ['CRITICAL', 'Flooding'] : tci >= 0 ? ['CRITICAL', 'Flood forecast']
+    : h >= LVL.warn ? ['WARNING', 'Above warning level'] : peak >= LVL.warn ? ['WARNING', 'Warning forecast'] : ['NORMAL', 'Normal'];
+  $('band').dataset.s = bs; $('b-state').textContent = bt;
+  $('clock').textContent = `${fmtTime(S.step)} MYT · 8 Dec 2026`;
+  $('b-link').textContent = S.link
+    ? (S.buffer ? `4G back, uploading ${S.buffer} buffered readings` : `4G online · ${S.syncs} outage${S.syncs === 1 ? '' : 's'} recovered`)
+    : `4G down since ${fmtTime(S.outageAt)} · ${S.buffer} readings buffered`;
 
-  const tci = S.fc.findIndex(p => p.h >= LVL.crit);
-  if (h >= LVL.crit) { $('v-ttc').textContent = 'Flooding now'; $('d-ttc').textContent = 'Level is above 145 cm'; $('k-ttc').dataset.s = 'CRITICAL'; }
-  else if (tci >= 0) { $('v-ttc').textContent = mins(tci + 1); $('d-ttc').textContent = `Expected to reach 145 cm at ${fmtTime(S.step + tci + 1)}`; $('k-ttc').dataset.s = 'CRITICAL'; }
-  else { $('v-ttc').textContent = 'Not expected'; $('d-ttc').textContent = 'No flood level in the next 3 h'; $('k-ttc').dataset.s = 'NORMAL'; }
-
-  $('v-link').textContent = S.link ? (S.buffer ? 'Syncing' : 'Online') : 'Offline';
-  $('d-link').textContent = S.link
-    ? (S.buffer ? `${S.buffer} buffered readings uploading` : `4G · MQTT over TLS · ${S.syncs} outage${S.syncs === 1 ? '' : 's'} recovered`)
-    : `${S.buffer} readings buffered since ${fmtTime(S.outageAt)}. Forecasting continues on site.`;
-  $('k-link').dataset.s = S.link ? 'NORMAL' : 'WARNING';
+  const trend = Math.abs(dh) < 0.3 ? 'holding steady' : `${dh > 0 ? 'rising' : 'falling'} ${Math.abs(dh).toFixed(1)} cm an hour`;
+  const fc = h >= LVL.crit ? 'It is <b class="c">over the 145 cm flood line</b>.'
+    : tci >= 0 ? `Forecast to reach the <b class="c">flood line at ${at(tci)}</b>, in ${mins(tci + 1)}.`
+    : h >= LVL.warn && peak <= h + 0.5 ? 'It is <b class="w">above the 130 cm warning line</b> and expected to fall.'
+    : peak >= LVL.warn ? `Forecast to peak at <b class="w">${peak.toFixed(0)} cm around ${at(peakI)}</b>, above the warning line.`
+    : peak > h + 0.5 ? `Forecast to peak at <b>${peak.toFixed(0)} cm</b> around ${at(peakI)}, below the warning line.`
+    : 'No flooding expected in the next 3 hours.';
+  $('now').innerHTML = `The lake is at <b>${h.toFixed(1)} cm</b> and ${trend}. ${fc}`;
 
   const raining = S.lake.queue.length > 0;
   $('btn-thunder').disabled = $('btn-monsoon').disabled = raining;
@@ -455,7 +450,7 @@ function renderLead() {
   rows.push(['Level reached 130 cm', ev.tw != null ? fmtTime(ev.tw) : (live ? 'not yet' : 'never')]);
   rows.push(['Flood forecast (145 cm)', ev.fc != null ? fmtTime(ev.fc) : 'not issued']);
   rows.push(['Level reached 145 cm', ev.tc != null ? fmtTime(ev.tc) : (live ? 'not yet' : 'never')]);
-  cmp.innerHTML = rows.map(([a, b]) => `<div><span>${a}</span><span class="mono">${b}</span></div>`).join('');
+  cmp.innerHTML = rows.map(([a, b]) => `<span>${a}</span><span>${b}</span>`).join('');
   const label = live ? 'Current storm' : `Last storm, peak ${ev.peak.toFixed(0)} cm`;
   if (ev.fw != null && ev.tw != null) {
     big.textContent = `${(ev.tw - ev.fw) * STEP_MIN} min`;
@@ -470,26 +465,26 @@ function renderReading() {
   const r = S.rec[S.rec.length - 1].r, st = status(r.water_level_cm);
   $('seq').textContent = `seq_no ${S.seq}`;
   const rows = [
-    ['reading_ts', isoUtc(S.step), ''], ['Water level', r.water_level_cm.toFixed(1), 'cm'], ['Rainfall (5 min)', r.rainfall_mm.toFixed(1), 'mm'],
+    ['reading_ts', isoUtc(S.step), '', 'k'], ['Water level', r.water_level_cm.toFixed(1), 'cm'], ['Rainfall (5 min)', r.rainfall_mm.toFixed(1), 'mm'],
     ['Turbidity', r.turbidity_ntu.toFixed(0), 'NTU'], ['pH', r.ph.toFixed(2), ''], ['Dissolved oxygen', r.dissolved_oxygen_mgl.toFixed(1), 'mg/L'],
     ['Water temperature', r.water_temp_c.toFixed(1), '°C'], ['Air temperature', r.air_temp_c.toFixed(1), '°C'], ['Humidity', r.humidity_pct.toFixed(0), '%'],
   ];
-  $('reading').innerHTML = rows.map(([k, v, u]) => `<dt>${k}</dt><dd class="mono">${v}${u ? ' ' + u : ''}</dd>`).join('') +
-    `<dt>alert_status</dt><dd><span class="pill ${st}">${st}</span></dd><dt>synced</dt><dd class="mono">${S.link ? 1 : 0}</dd>`;
+  $('reading').innerHTML = rows.map(([k, v, u, c]) => `<dt${c ? ' class="k"' : ''}>${k}</dt><dd>${v}${u ? ' ' + u : ''}</dd>`).join('') +
+    `<dt class="k">alert_status</dt><dd><span class="tag ${st}">${st}</span></dd><dt class="k">synced</dt><dd>${S.link ? 1 : 0}</dd>`;
 }
 
 function renderAlerts() {
   const list = S.alerts.slice(0, 8);
   $('alerts').innerHTML = list.length ? list.map(a => {
-    const sent = a.sent === null ? '<span class="pill WARNING">Queued</span>' : `<span class="mono">${fmtTime(a.sent)}</span>${a.sent > a.step ? ' <span class="muted">(after outage)</span>' : ''}`;
-    const row = `<tr class="${a.isNew ? 'new' : ''}"><td class="n">${fmtTime(a.step)}</td><td><span class="pill ${a.source}">${a.source}</span></td><td><span class="pill ${a.severity}">${a.severity}</span></td><td class="n">${a.value.toFixed(1)} cm</td><td>${a.msg}${a.resolved ? ' <span class="pill RESOLVED">Resolved</span>' : ''}</td><td>${sent}</td></tr>`;
+    const sent = a.sent === null ? '<span class="tag WARNING">Queued</span>' : `<span class="mono">${fmtTime(a.sent)}</span>${a.sent > a.step ? ' <span class="muted">(after outage)</span>' : ''}`;
+    const row = `<tr class="${a.isNew ? 'new' : ''}"><td class="n">${fmtTime(a.step)}</td><td><span class="tag ${a.source}">${a.source}</span></td><td><span class="tag ${a.severity}">${a.severity}</span></td><td class="n">${a.value.toFixed(1)} cm</td><td>${a.msg}${a.resolved ? ' <span class="tag RESOLVED">Resolved</span>' : ''}</td><td>${sent}</td></tr>`;
     a.isNew = false; return row;
   }).join('') : '<tr><td colspan="6" class="empty">No alerts yet.</td></tr>';
 }
 
 function renderModel() {
   const M = S.model;
-  $('coef').innerHTML = '<span class="eyebrow">Input</span><span class="eyebrow" style="text-align:right">Weight</span>' +
+  $('coef').innerHTML = '<span class="h">Input</span><span class="h">Weight</span>' +
     FEAT.map((f, i) => `<span>${f}</span><span>${M.theta[i] >= 0 ? '+' : ''}${M.theta[i].toFixed(4)}</span>`).join('');
   $('fit').textContent = `Trained on ${S.trainRows.toLocaleString()} readings (error ${S.trainRmse.toFixed(2)} cm per 5-min step). Live error over recent readings: ${Math.sqrt(M.mse).toFixed(2)} cm.`;
 }
@@ -499,8 +494,8 @@ function draw() {
   const W = box.clientWidth, H = box.clientHeight;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
-  const C = { fg: css('--fg'), muted: css('--muted'), line: css('--line'), acc: css('--accent'), rain: css('--rain'), warn: css('--warn'), crit: css('--crit') };
-  const L = 44, R = 12, T = 30, rainH = Math.max(56, H * 0.2), gap = 26, B = 22;
+  const C = { fg: css('--fg'), muted: css('--muted'), line: css('--line'), acc: css('--accent'), rain: css('--rain'), warn: css('--warn'), crit: css('--crit'), surf: css('--surface') };
+  const L = 64, R = 12, T = 36, rainH = Math.max(56, H * 0.2), gap = 26, B = 22;
   const wTop = T, wBot = H - B - rainH - gap, rTop = wBot + gap, rBot = H - B;
   const n = S.hs.length, nh = Math.min(HIST, n), total = HIST + HORIZON;
   const x = i => L + (i / total) * (W - L - R);          // i = 0..total, HIST is "now"
@@ -515,10 +510,29 @@ function draw() {
   g.fillStyle = C.warn;
   for (let i = 0; i < nh; i++) if (!S.rec[S.rec.length - nh + i].link) g.fillRect(x(off + i), lane, x(off + i + 1) - x(off + i) + 0.5, 6);
 
-  // grid + y labels
-  g.strokeStyle = C.line; g.lineWidth = 1; g.fillStyle = C.muted; g.textAlign = 'right';
-  for (let v = 100; v <= 160; v += 10) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); g.fillText(v, L - 6, y(v)); }
-  g.save(); g.textAlign = 'left'; g.fillText('cm', L + 4, wTop - 10); g.restore();
+  // forecast side of the plot gets a faint wash so past and future read apart
+  g.fillStyle = C.acc; g.globalAlpha = 0.05; g.fillRect(x(HIST), wTop, W - R - x(HIST), rBot - wTop); g.globalAlpha = 1;
+
+  // grid
+  g.strokeStyle = C.line; g.lineWidth = 1;
+  for (let v = 100; v <= 160; v += 10) { g.beginPath(); g.moveTo(L, y(v)); g.lineTo(W - R, y(v)); g.stroke(); }
+
+  // level axis drawn as a staff gauge: an E every 5 cm, alternating sides, coloured from the warning line up
+  const gx = L - 26, gw = 18, hNow = S.hs[n - 1], ink = v => v >= LVL.crit ? C.crit : v >= LVL.warn ? C.warn : C.fg;
+  g.fillStyle = C.surf; g.fillRect(gx, wTop, gw, wBot - wTop);
+  g.fillStyle = C.acc; g.globalAlpha = 0.3; g.fillRect(gx, y(hNow), gw, wBot - y(hNow)); g.globalAlpha = 1;
+  const band = (a, b) => [y(Math.min(b, yMax)), y(Math.max(a, yMin)) - y(Math.min(b, yMax))];
+  for (let d = yMin; d < yMax; d += 5) {
+    const left = (d / 5) % 2 === 0, sx = left ? gx + 2 : gx + gw / 2;
+    g.fillStyle = ink(d);
+    for (const o of [0, 2, 4]) { const [top, hgt] = band(d + o, d + o + 1); g.fillRect(sx, top, gw / 2 - 2, hgt); }
+    const [top, hgt] = band(d, d + 5); g.fillRect(left ? gx + 2 : gx + gw - 4.5, top, 2.5, hgt);
+  }
+  g.strokeStyle = C.line; g.strokeRect(gx + 0.5, wTop + 0.5, gw - 1, wBot - wTop - 1);
+  g.textAlign = 'right';
+  for (let v = 100; v <= 160; v += 10) { g.fillStyle = ink(v) === C.fg ? C.muted : ink(v); g.fillText(v, gx - 5, y(v)); }
+  g.fillStyle = C.muted; g.textAlign = 'center'; g.fillText('cm', gx + gw / 2, wTop - 10);
+  g.textAlign = 'right';
   for (const v of [0, 5, 10]) { g.fillText(v, L - 6, yr(v)); }
   g.beginPath(); g.moveTo(L, rBot); g.lineTo(W - R, rBot); g.stroke();
   g.save(); g.textAlign = 'left'; g.fillText('mm / 5 min', L + 4, rTop - 9); g.restore();
@@ -550,7 +564,10 @@ function draw() {
   g.strokeStyle = C.acc; g.lineWidth = 2.2; g.setLineDash([6, 4]); g.beginPath(); g.moveTo(fx(0), y(S.hs[n - 1]));
   fc.forEach((p, k) => g.lineTo(fx(k + 1), y(p.h))); g.stroke(); g.setLineDash([]);
 
-  // measured line
+  // measured line, with the lake shaded beneath it
+  g.fillStyle = C.acc; g.globalAlpha = 0.1; g.beginPath(); g.moveTo(x(off + 1), wBot);
+  for (let i = 0; i < nh; i++) g.lineTo(x(off + i + 1), y(S.hs[n - nh + i]));
+  g.lineTo(x(HIST), wBot); g.closePath(); g.fill(); g.globalAlpha = 1;
   g.strokeStyle = C.fg; g.lineWidth = 2; g.beginPath();
   for (let i = 0; i < nh; i++) { const X = x(off + i + 1), Y = y(S.hs[n - nh + i]); i ? g.lineTo(X, Y) : g.moveTo(X, Y); }
   g.stroke();
